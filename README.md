@@ -1,5 +1,7 @@
 # gomempool
 
+[![Build Status](https://travis-ci.org/thejerf/gomempool.png?branch=master)](https://travis-ci.org/thejerf/gomempool)
+
 A []byte pool implementation for Go.
 
 Go network programs can get into a bit of garbage collection trouble if
