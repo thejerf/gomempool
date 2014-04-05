@@ -2,52 +2,113 @@
 
 Package gomempool implements a simple memory pool for byte slices.
 
-The Go garbage collector decides when to run by measuring the number of
-bytes allocated. If you have a use pattern where you are allocating
-a large number of sizeable []bytes, you will cause the garbage collector
-to be run often. You can avoid this problem by reusing []bytes. This
-package provides you a pool of []bytes to make this easier.
+When To Use gomempool
 
-To use the pool, a memory Pool is created with New. You then request
-an Allocator from the Pool, which will hand you back a []byte with
-its Allocate call. When you are done with the []byte, call .Return()
-on the Allocator. You may only have one []byte at a time from a
-given Allocator, and you may not .Return() an Allocator that does
-not currently have an associated []byte. A convenient all-in-one
-function Allocate is also provided on the Pool object itself to both
-return a []byte and its associated Allocator in one shot.
+The Go garbage collector runs more often when more bytes are allocated.
+(For full details, see the runtime package documentation on the GOGC
+variable.) Avoiding allocations can help the stop-the-world GC run
+much less often.
 
-This Pool is surprisingly easy to use, because calling .Return() is
-optional. If you don't return any buffers, you don't get any benefit
-from the Pool, but Pools only use resources proportional to the values
-it is waiting to hand out, so it's not that expensive, either. This
-flexibility allows you to still benefit from a Pool even if you have
-the occasional buffer that has a complicated lifetime; if that happens,
-simply let the normal GC handle that buffer and the Pool will not break.
+Consider using gomempool if your code is allocating many []byte slices,
+and triggering many garbage collection pauses as a result. I strongly
+suggest determining this via consulting runtime.ReadMemStats to ensure
+this is the real problem before using gomempool. gomempool is a power
+tool; it can save your program, but it can blow your feet off, too.
+(I've done both.)
 
-The Pool itself is threadsafe; the Allocators it hands out are not.
+Using Gomempool
 
-The library will panic if you misuse the Allocators. I have made
-the unusual choice to panic out of a library because this represents a
-memory management error, which is only marginally less serious in Go
-than it is in any other language. (You may not segfault, but flawed
-memory management can dish out far worse. Better to find out early.) This
-code also panics if you request a buffer larger than the pool permits;
-this I will admit is more dubious but adds errors to an awful lot of
-signatures if we try to return errors. (If you are using a pool but
-don't have some concept of "maximum buffer I'll support", you might want
-to see if you can set such a size; unbounded buffers are often a DOS
-opportunity.)
+To use the pool, there are three basic steps:
+
+ 1. Create a pool
+ 2. Obtain byte slices
+ 3. Optionally return the byte slices
+
+In addition to this documentation, be sure to open the Example below for
+a code example.
+
+Create A Pool
+
+A *Pool is obtained by calling gomempool.New. All methods on the *Pool are
+threadsafe. The pool can be configured via the New call.
+
+A nil pointer of type *gomempool.Pool is also a valid pool. This will
+use normal make() to create byte slices and simply discard the slice
+when asked to .Return() it.
+
+Obtain byte slices
+
+[]bytes in the pool come with an "Allocator" that is responsible for
+returning them correctly.
+
+To obtain an allocator, you call GetNewAllocator() on the pool. This
+returns an allocator that is not yet used. You may then call
+.Allocate(uint64) on it to assign a []byte from the pool. This []byte
+is then associated with that Allocator until you call .Return() on
+the allocator, after which the []byte goes back into the pool.
+
+You MUST NOT call .Return() until you are entirely done with the []byte.
+This includes shared slices you may have created; this is by far the
+easiest way to get in trouble with a []byte pool, as it is easy to
+accidentally introduce sharing without realizing it.
+
+You must also make sure not to do anything with your []byte that might
+cause another []byte to be created instead; for instance, using
+your pooled []byte in an "append" call is dangerous, because the runtime
+might decide to give you back a []byte that backs to an entirely
+different array. In this case your []byte and your Allocator will
+cease to be related. If the Allocator is correctly managed, your code
+will not fail, but you won't be getting any benefit, either.
+
+You may retrieve the []byte slice corresponding to an Allocator at any
+time by calling .Bytes(). This means that if you do need to pass the
+[]byte and Allocator around, it suffices to pass just the Allocator.
+(Though, be aware that the Allocator's []byte will be of the original
+size you asked for. This can not be changed, as you can not change the
+original slice itself.)
+
+Once allocated, an allocator will PANIC if you try to allocate again with
+ErrBytesAlreadyAllocated.
+
+Once .Return() has been called, an allocator will PANIC if you try to
+.Return() the []byte again.
+
+If no []byte is currently allocated, .Bytes() will PANIC if called.
+
+This is fully on purpose. All of these situations represent profound
+errors in your code. This sort of error is just as dangerous in Go
+as it is in any other language. Go may not segfault, but memory
+management issues can still dish out the pain; better to find out
+earlier rather than later.
+
+You can combine obtaining an Allocator and a particular sized []byte
+by calling .Allocate() on the pool.
+
+Allocators can be reused freely, as long as they are used correctly.
+However, an individual Allocator is not threadsafe. Its interaction
+with the Pool is, but its internal values are not; do not use the
+same Allocator from more than one goroutine at a time.
+
+The Allocators returned by the nil *Pool use make() to create new
+slices every time, and simply discard the []byte when done, but they
+enforce the exact same rules as the "real" Allocators, and panic
+in all the same places. This is so there is as little difference as
+possible between the two types of pools.
+
+Optionally return the byte slices
+
+Calling .Return() on an allocator is optional. If a []byte is not
+returned to the pool, you do not get any further benefit from the pool
+for that []byte, but the garbage collector will still clean it up
+normally. This means using a pool is still feasible even if some of
+your code paths may need to retain a []byte for a long or complicated
+period of time.
+
+Additional Functionality
 
 You can query the pool for its cache statistics by calling Stats(),
 which will return a structure describing how the individual buckets
 are performing.
-
-A nil pointer of type pool.Pool provides a null Pool implementation,
-where all allocations are served directly out of "make" and there's
-no pooling. This can be useful to stub out the Pool for testing, or
-comparing performance with and without the pool by only changing
-where the Pool is created.
 
 Quality: At the moment I would call this alpha code. Go lint clean, go vet
 clean, 100% coverage in the tests. You and I both know that doesn't prove
@@ -68,7 +129,7 @@ const (
 
 // This is "panic"ed out when attempting to Return() an Allocation that has
 // already been returned.
-var ErrBytesAlreadyReturned = errors.New("can't .Return() the bytes from an Allocator because the bytes were already returned")
+var ErrBytesAlreadyReturned = errors.New("can't perform operation because the bytes were already returned")
 
 // This is "panic"ed out when attempting to Allocate() with an Allocator
 // that is currently still allocated.
@@ -147,9 +208,6 @@ func New(minSize, maxSize, maxBufs uint64) *Pool {
 		stats[idx].Size = 1 << uint(idx)
 	}
 
-	// in order to keep this simple, we just go ahead and allocate all
-	// largestPowerWeSupport possible "elements" in the pool, rather than
-	// add lots of fiddly, bug-prone math to save a bare handful of bytes
 	return &Pool{
 		elements: make([]*poolElement, largestPowerWeSupport),
 		stats:    stats,
@@ -187,17 +245,14 @@ func (p *Pool) Stats() []Stat {
 // GetNewAllocator returns an Allocator that can be used to obtain byte slices.
 func (p *Pool) GetNewAllocator() Allocator {
 	if p == nil {
-		return &GCAllocator{nil}
+		return &gcAllocator{nil}
 	}
 
-	return &PoolAllocator{nil, p}
+	return &poolAllocator{nil, p}
 }
 
-// Allocate an Allocator, and also immediately obtains and returns a byte
-// slice of the given size.
-//
-// The capacity of the resulting slice may be larger than what you asked
-// for. It is safe to use this additional capacity if you choose.
+// Allocate creates an Allocator, and also immediately obtains and returns
+// a byte slice of the given size, associated with the returned Allocator.
 func (p *Pool) Allocate(size uint64) ([]byte, Allocator) {
 	alloc := p.GetNewAllocator()
 	bytes := alloc.Allocate(size)
@@ -297,13 +352,11 @@ type Allocator interface {
 	// Allocate allocates the requested number of bytes into the
 	// ReturnableBytes fulfiller, or panics if this is already allocated.
 	// Returns the byte slice that was allocated.
-	//
-	// The only error that can be returned is ErrAllocationTooLarge.
 	Allocate(uint64) []byte
 
 	// Bytes returns the currently-allocated bytes, or panics if there
 	// aren't any. This will represent the same range of memory as what
-	// Allocate returned, but the slice may not compare ==.
+	// Allocate returned.
 	Bytes() []byte
 
 	// Returns the bytes to the pool, or whatever this interface does
@@ -312,19 +365,19 @@ type Allocator interface {
 	Return()
 }
 
-// PoolAllocator implements the Allocator interface, and is what is given
+// poolAllocator implements the Allocator interface, and is what is given
 // to you by a non-nil Pool.
 //
-// PoolAllocator validates that the underlying buffer has not been .Return()ed
+// poolAllocator validates that the underlying buffer has not been .Return()ed
 // at the point in time where you call .Bytes() or .Return(). However, this
 // can not catch all possible sharing problems.
-type PoolAllocator struct {
+type poolAllocator struct {
 	*buffer
 	pool *Pool
 }
 
 // Allocate implements the Allocator interface.
-func (pb *PoolAllocator) Allocate(size uint64) []byte {
+func (pb *poolAllocator) Allocate(size uint64) []byte {
 	if pb.buffer != nil {
 		panic(ErrBytesAlreadyAllocated)
 	}
@@ -334,7 +387,7 @@ func (pb *PoolAllocator) Allocate(size uint64) []byte {
 }
 
 // Bytes implements the Allocator interface.
-func (pb *PoolAllocator) Bytes() []byte {
+func (pb *poolAllocator) Bytes() []byte {
 	if pb.buffer == nil {
 		panic(ErrBytesAlreadyReturned)
 	}
@@ -342,7 +395,7 @@ func (pb *PoolAllocator) Bytes() []byte {
 }
 
 // Return implements the Allocator interface.
-func (pb *PoolAllocator) Return() {
+func (pb *poolAllocator) Return() {
 	if pb.buffer == nil {
 		panic(ErrBytesAlreadyReturned)
 	}
@@ -355,15 +408,19 @@ type buffer struct {
 	size int
 }
 
-// GCAllocator serve up byte slices that are only managed by the conventional
+// gcAllocator serve up byte slices that are only managed by the conventional
 // Go garbage collection. These are returned by the nil pool.
-type GCAllocator struct {
+//
+// The zero gcAllocator is a valid Allocator. You can simply create one
+// of these with no *Pool, and it will function as an Allocator. The
+// gcAllocator is left public for this reason.
+type gcAllocator struct {
 	bytes []byte
 }
 
 // Allocate uses the normal make call to create a slice of bytes with a length
 // and capacity of the given size.
-func (gcb *GCAllocator) Allocate(size uint64) []byte {
+func (gcb *gcAllocator) Allocate(size uint64) []byte {
 	if gcb.bytes != nil {
 		panic(ErrBytesAlreadyAllocated)
 	}
@@ -372,7 +429,7 @@ func (gcb *GCAllocator) Allocate(size uint64) []byte {
 }
 
 // Bytes returns the []byte created by Allocate.
-func (gcb *GCAllocator) Bytes() []byte {
+func (gcb *gcAllocator) Bytes() []byte {
 	if gcb.bytes == nil {
 		panic(ErrBytesAlreadyReturned)
 	}
@@ -385,7 +442,7 @@ func (gcb *GCAllocator) Bytes() []byte {
 // The Allocator contract is that once Return()ed, the corresponding byte
 // slice will be reused; of course in this case that won't happen, but from
 // the Pool's point of view that's an accident of implementation.
-func (gcb *GCAllocator) Return() {
+func (gcb *gcAllocator) Return() {
 	if gcb.bytes == nil {
 		panic(ErrBytesAlreadyReturned)
 	}

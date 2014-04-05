@@ -30,10 +30,6 @@ func Example() {
 	defer alloc.Return()
 
 	// ... use bytes...
-
-	// Also note that because you can obtain the byte slice from
-	// the Allocator, you don't have to pass both around; it suffices
-	// to pass just the Allocator.
 }
 
 type BitTest struct {
@@ -268,28 +264,28 @@ func TestCoverage(t *testing.T) {
 		a.Return()
 	})
 
-	// Ensure the GCAllocator faithfully maintains the interface
+	// Ensure the gcAllocator faithfully maintains the interface
 	// of the Allocator.
 	crashes(func() {
-		g := &GCAllocator{}
+		g := &gcAllocator{}
 		g.Bytes()
 	})
 
 	crashes(func() {
-		g := &GCAllocator{}
+		g := &gcAllocator{}
 		g.Allocate(10)
 		g.Allocate(10)
 	})
 
 	crashes(func() {
-		g := &GCAllocator{}
+		g := &gcAllocator{}
 		g.Return()
 	})
 
-	g := &GCAllocator{}
+	g := &gcAllocator{}
 	g.Allocate(10)
 	b := g.Bytes()
 	if len(b) != 10 {
-		t.Fatal("GCAllocator doesn't give out the right stuff.")
+		t.Fatal("gcAllocator doesn't give out the right stuff.")
 	}
 }
