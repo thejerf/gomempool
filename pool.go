@@ -396,18 +396,11 @@ type Allocator interface {
 	Return()
 }
 
-// poolAllocator implements the Allocator interface, and is what is given
-// to you by a non-nil Pool.
-//
-// poolAllocator validates that the underlying buffer has not been .Return()ed
-// at the point in time where you call .Bytes() or .Return(). However, this
-// can not catch all possible sharing problems.
 type poolAllocator struct {
 	*buffer
 	pool *Pool
 }
 
-// Allocate implements the Allocator interface.
 func (pb *poolAllocator) Allocate(size uint64) []byte {
 	if pb.buffer != nil {
 		panic(ErrBytesAlreadyAllocated)
@@ -417,7 +410,6 @@ func (pb *poolAllocator) Allocate(size uint64) []byte {
 	return pb.buf[:size]
 }
 
-// Bytes implements the Allocator interface.
 func (pb *poolAllocator) Bytes() []byte {
 	if pb.buffer == nil {
 		panic(ErrBytesAlreadyReturned)
@@ -425,7 +417,6 @@ func (pb *poolAllocator) Bytes() []byte {
 	return pb.buffer.buf[:pb.size]
 }
 
-// Return implements the Allocator interface.
 func (pb *poolAllocator) Return() {
 	if pb.buffer == nil {
 		panic(ErrBytesAlreadyReturned)
@@ -439,18 +430,10 @@ type buffer struct {
 	size int
 }
 
-// gcAllocator serve up byte slices that are only managed by the conventional
-// Go garbage collection. These are returned by the nil pool.
-//
-// The zero gcAllocator is a valid Allocator. You can simply create one
-// of these with no *Pool, and it will function as an Allocator. The
-// gcAllocator is left public for this reason.
 type gcAllocator struct {
 	bytes []byte
 }
 
-// Allocate uses the normal make call to create a slice of bytes with a length
-// and capacity of the given size.
 func (gcb *gcAllocator) Allocate(size uint64) []byte {
 	if gcb.bytes != nil {
 		panic(ErrBytesAlreadyAllocated)
@@ -459,7 +442,6 @@ func (gcb *gcAllocator) Allocate(size uint64) []byte {
 	return gcb.bytes
 }
 
-// Bytes returns the []byte created by Allocate.
 func (gcb *gcAllocator) Bytes() []byte {
 	if gcb.bytes == nil {
 		panic(ErrBytesAlreadyReturned)
@@ -467,12 +449,6 @@ func (gcb *gcAllocator) Bytes() []byte {
 	return gcb.bytes
 }
 
-// Return "returns" the byte slice by releasing its reference to the
-// []byte that it created.
-//
-// The Allocator contract is that once Return()ed, the corresponding byte
-// slice will be reused; of course in this case that won't happen, but from
-// the Pool's point of view that's an accident of implementation.
 func (gcb *gcAllocator) Return() {
 	if gcb.bytes == nil {
 		panic(ErrBytesAlreadyReturned)
@@ -499,7 +475,6 @@ func nextPowerOf2(v uint64) uint64 {
 	return v
 }
 
-// Fun todo: Track down how to create a 64-bit version of the 32-bit function.
 func largestSet(v64 uint64) (r byte) {
 	if v64&0xffffffff00000000 != 0 {
 		return largestSet32(uint32(v64>>32)) + 32
