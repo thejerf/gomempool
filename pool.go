@@ -24,22 +24,40 @@ To use the pool, there are three basic steps:
  2. Obtain byte slices
  3. Optionally return the byte slices
 
-In addition to this documentation, be sure to open the Example below for
-a code example.
+See the Example below for concise usage examples.
 
 Create A Pool
+
+First, create a pool.
+
+    pool := gomempool.New(
+            64,          // minimum sized slice to hand out
+            1024 * 1024, // maximum sized slice to hand out
+            10,          // maximum number of buffers to save
+        )
 
 A *Pool is obtained by calling gomempool.New. All methods on the *Pool are
 threadsafe. The pool can be configured via the New call.
 
+    var pool *gomempool.Pool
+
 A nil pointer of type *gomempool.Pool is also a valid pool. This will
 use normal make() to create byte slices and simply discard the slice
-when asked to .Return() it.
+when asked to .Return() it. This is convenient for testing whether
+you've got a memory error in your code, because you can swap in a nil
+Pool pointer without changing any other code. If an error goes away
+when you do that, you have a memory error. (Probably .Return()ing
+something too soon.)
 
 Obtain byte slices
 
 []bytes in the pool come with an "Allocator" that is responsible for
 returning them correctly.
+
+    allocator := pool.GetNewAllocator()
+    bytes := allocator.Allocate(453)
+
+    // use the bytes
 
 To obtain an allocator, you call GetNewAllocator() on the pool. This
 returns an allocator that is not yet used. You may then call
@@ -60,12 +78,24 @@ different array. In this case your []byte and your Allocator will
 cease to be related. If the Allocator is correctly managed, your code
 will not fail, but you won't be getting any benefit, either.
 
+    allocator2 := pool.GetNewAllocator()
+    allocator2.Allocate(738)
+    newBytes := allocator.Bytes()
+
 You may retrieve the []byte slice corresponding to an Allocator at any
 time by calling .Bytes(). This means that if you do need to pass the
 []byte and Allocator around, it suffices to pass just the Allocator.
 (Though, be aware that the Allocator's []byte will be of the original
 size you asked for. This can not be changed, as you can not change the
 original slice itself.)
+
+Allocators can be reused freely, as long as they are used correctly.
+However, an individual Allocator is not threadsafe. Its interaction
+with the Pool is, but its internal values are not; do not use the
+same Allocator from more than one goroutine at a time.
+
+    // using the same allocator as above
+    allocator2.Allocate(723) // PANIC!
 
 Once allocated, an allocator will PANIC if you try to allocate again with
 ErrBytesAlreadyAllocated.
@@ -81,13 +111,10 @@ as it is in any other language. Go may not segfault, but memory
 management issues can still dish out the pain; better to find out
 earlier rather than later.
 
+    thirdBytes, newAllocator := pool.Allocate(23314)
+
 You can combine obtaining an Allocator and a particular sized []byte
 by calling .Allocate() on the pool.
-
-Allocators can be reused freely, as long as they are used correctly.
-However, an individual Allocator is not threadsafe. Its interaction
-with the Pool is, but its internal values are not; do not use the
-same Allocator from more than one goroutine at a time.
 
 The Allocators returned by the nil *Pool use make() to create new
 slices every time, and simply discard the []byte when done, but they
@@ -96,6 +123,10 @@ in all the same places. This is so there is as little difference as
 possible between the two types of pools.
 
 Optionally return the byte slices
+
+    bytes, allocator := pool.Allocate(29348)
+    defer allocator.Return()
+    // use bytes
 
 Calling .Return() on an allocator is optional. If a []byte is not
 returned to the pool, you do not get any further benefit from the pool
