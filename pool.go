@@ -212,7 +212,7 @@ type Stat struct {
 	Miss      uint64
 	Returned  uint64
 	Discarded uint64
-	Depth     uint32
+	Depth     uint64
 }
 
 // New returns a new Pool.
@@ -265,7 +265,7 @@ func (p *Pool) Stats() []Stat {
 			if element == nil {
 				stat.Depth = 0
 			} else {
-				stat.Depth = element.depth + 1
+				stat.Depth = uint64(element.depth + 1)
 			}
 			s = append(s, stat)
 		}
