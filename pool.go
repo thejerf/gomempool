@@ -415,9 +415,8 @@ func (bs *Stat) returned() {
 
 // A Allocator wraps some allocated bytes.
 type Allocator interface {
-	// Allocate allocates the requested number of bytes into the
-	// ReturnableBytes fulfiller, or panics if this is already allocated.
-	// Returns the byte slice that was allocated.
+	// Allocate allocates the requested number of bytes and returns the
+	// correct []byte. Panics if this allocator is currently allocated.
 	Allocate(uint64) []byte
 
 	// Bytes returns the currently-allocated bytes, or panics if there
@@ -425,9 +424,9 @@ type Allocator interface {
 	// Allocate returned.
 	Bytes() []byte
 
-	// Returns the bytes to the pool, or whatever this interface does
-	// to deallocate bytes. Panics with ErrBytesAlreadyReturned if
-	// the bytes have already been returned.
+	// This deallocates the allocator. If a pool is being used, this
+	// returns the []byte to the pool; if the nil pool is being used, this
+	// simply drops the []byte reference and lets the GC pick it up.
 	Return()
 }
 
