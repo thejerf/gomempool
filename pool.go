@@ -9,12 +9,29 @@ The Go garbage collector runs more often when more bytes are allocated.
 variable.) Avoiding allocations can help the stop-the-world GC run
 much less often.
 
-Consider using gomempool if your code is allocating many []byte slices,
-and triggering many garbage collection pauses as a result. I strongly
-suggest determining this via consulting runtime.ReadMemStats to ensure
-this is the real problem before using gomempool. gomempool is a power
+To determine if you should use this, first deploy your code into as
+realistic an environment as possible. Extract a runtime.MemStats structure
+from your running code. Examine the various Pause fields in that
+structure to determine if you have a GC problem, preferably in conjunction
+with some other monitoring of real performance. (Remember the numbers
+are in nanoseconds.) If the numbers you have are OK for your use case,
+STOP HERE. Do not proceed.
+
+If you are generating a lot of garbage collection pauses, the next question
+is why. Profile the heap. If the answer is anything other than []byte
+slices, STOP HERE. Do not proceed.
+
+Finally, if you are indeed seeing a lot of allocations of []bytes, you
+may wish to preceed with using this library. gomempool is a power
 tool; it can save your program, but it can blow your feet off, too.
 (I've done both.)
+
+That said, despite the narrow use case of this library, it can have an
+effect in certain situations, which I happened to encounter. I suspect
+the biggest use case is a network application that often allocates
+large messages, which is what I have, causing an otherwise relatively
+memory-svelte program to allocate dozens of megabytes per second of
+[]byte buffers to process messages.
 
 Using Gomempool
 
@@ -24,7 +41,8 @@ To use the pool, there are three basic steps:
  2. Obtain byte slices
  3. Optionally return the byte slices
 
-See the Example below for concise usage examples.
+The following prose documentation will cover each step at length. Expand the
+Example below for concise usage examples and things you can copy & paste.
 
 Create A Pool
 
@@ -134,6 +152,23 @@ for that []byte, but the garbage collector will still clean it up
 normally. This means using a pool is still feasible even if some of
 your code paths may need to retain a []byte for a long or complicated
 period of time.
+
+Best Usage
+
+If you have a byte slice that is getting passed through some goroutines,
+I recommend creating a structure that holds all the relevant data about
+the object bound together with the allocator:
+
+ type UsesBytesFromPool struct {
+     alloc         *gomempool.Allocator
+     ParsedMessage ParsedMessage
+}
+
+which makes it easy to keep the two bound together, and pass them around,
+with only the last user finally performing the deallocation.
+
+This library does not provide this structure since all I could give you
+is basically the above struct, with an interface{} in it.
 
 Additional Functionality
 
