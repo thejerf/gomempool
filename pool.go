@@ -160,7 +160,7 @@ I recommend creating a structure that holds all the relevant data about
 the object bound together with the allocator:
 
  type UsesBytesFromPool struct {
-     alloc         *gomempool.Allocator
+     alloc         gomempool.Allocator
      ParsedMessage ParsedMessage
 }
 
