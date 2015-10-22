@@ -105,6 +105,9 @@ func TestBitBashing(t *testing.T) {
 
 func TestPool(t *testing.T) {
 	p := New(256, 10*1024*1024, 3)
+	if p.MinSize() != 256 || p.MaxSize() != 10*1024*1024 {
+		t.Fatal("MinSize or MaxSize not working properly")
+	}
 
 	// let's buf!
 	b1, a1 := p.Allocate(1)
@@ -114,6 +117,10 @@ func TestPool(t *testing.T) {
 	_, a2 := p.Allocate(1)
 	b3, a3 := p.Allocate(1)
 	_, a4 := p.Allocate(1)
+
+	if a4.(*poolAllocator).buffer.unmanaged == true {
+		t.Fatal("Incorrectly giving out unmanaged buffers on small allocs")
+	}
 
 	a1.Return()
 
@@ -161,6 +168,9 @@ func TestPool(t *testing.T) {
 	if cap(b7) != 10*1024*1024 {
 		t.Fatal("Rounding off the top end doesn't seem to work.")
 	}
+	if a7.(*poolAllocator).buffer.unmanaged {
+		t.Fatal("Off-by-one error; bufsize == maxsize showing as unallocated")
+	}
 	a7.Return()
 	b7 = a7.Allocate(10*1024*1024 - 1)
 	if cap(b7) != 10*1024*1024 {
@@ -169,6 +179,19 @@ func TestPool(t *testing.T) {
 	a6.Return()
 	a7.Return()
 
+	// Per https://github.com/thejerf/gomempool/issues/1 , it is
+	// advantageous to be able to allocate larger buffers and just
+	// throw them away, rather than hang on to them.
+	b8, a8 := p.Allocate(10*1024*1024 + 1)
+	if len(b8) != 10*1024*1024+1 {
+		t.Fatal("Allocation somehow screwed up in the over case")
+	}
+	if a8.(*poolAllocator).buffer.unmanaged == false {
+		t.Fatal("bufsize = maxsize+1 showing as managed")
+	}
+	a8.Return()
+
+	// test for coverage
 	p.Stats()
 }
 
@@ -215,49 +238,44 @@ func TestStats(t *testing.T) {
 
 // leftover bits we need to test
 func TestCoverage(t *testing.T) {
-	crashes := func(f func()) {
+	crashes := func(test string, f func()) {
 		defer func() {
 			r := recover()
 			if r == nil {
-				t.Fatal("Failed to crash")
+				t.Fatal(test + " failed to crash")
 			}
 		}()
 
 		f()
 	}
 
-	crashes(func() {
+	crashes("pool too big", func() {
 		New(1, 1<<largestPowerWeSupport, 20)
 	})
 
-	crashes(func() {
+	crashes("min larger than max", func() {
 		New(75, 50, 20)
 	})
 
-	crashes(func() {
-		p := New(4, 16, 10)
-		p.Allocate(17)
-	})
-
-	crashes(func() {
+	crashes("double-allocation", func() {
 		p := New(4, 16, 1)
 		_, a := p.Allocate(10)
 		a.Allocate(10)
 	})
 
-	crashes(func() {
+	crashes("bytes before allocation", func() {
 		p := New(4, 16, 1)
 		a := p.GetNewAllocator()
 		a.Bytes()
 	})
 
-	crashes(func() {
+	crashes("return before allocation", func() {
 		p := New(4, 16, 1)
 		a := p.GetNewAllocator()
 		a.Return()
 	})
 
-	crashes(func() {
+	crashes("double-return", func() {
 		p := New(4, 16, 1)
 		_, a := p.Allocate(10)
 		a.Return()
@@ -266,18 +284,18 @@ func TestCoverage(t *testing.T) {
 
 	// Ensure the gcAllocator faithfully maintains the interface
 	// of the Allocator.
-	crashes(func() {
+	crashes("gcAllocator isn't an Allocator", func() {
 		g := &gcAllocator{}
 		g.Bytes()
 	})
 
-	crashes(func() {
+	crashes("gcAllocator still panics on double-allocate", func() {
 		g := &gcAllocator{}
 		g.Allocate(10)
 		g.Allocate(10)
 	})
 
-	crashes(func() {
+	crashes("gcAllocator still panics on return without allocate", func() {
 		g := &gcAllocator{}
 		g.Return()
 	})

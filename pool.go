@@ -49,8 +49,8 @@ Create A Pool
 First, create a pool.
 
     pool := gomempool.New(
-            64,          // minimum sized slice to hand out
-            1024 * 1024, // maximum sized slice to hand out
+            64,          // minimum sized slice to store and hand out
+            1024 * 1024, // maximum sized slice to store and hand out
             10,          // maximum number of buffers to save
         )
 
@@ -82,6 +82,11 @@ returns an allocator that is not yet used. You may then call
 .Allocate(uint64) on it to assign a []byte from the pool. This []byte
 is then associated with that Allocator until you call .Return() on
 the allocator, after which the []byte goes back into the pool.
+
+If you ask for more bytes than the pool is configured to store, the
+Allocator will create a transient []byte, which it will not manage.
+You can check whether you are invoking this case by calling .MaxSize on
+the pool.
 
 You MUST NOT call .Return() until you are entirely done with the []byte.
 This includes shared slices you may have created; this is by far the
@@ -325,11 +330,21 @@ func (p *Pool) Allocate(size uint64) ([]byte, Allocator) {
 	return bytes, alloc
 }
 
+// MaxSize returns the maximum size of byte slices the pool will manage.
+func (p *Pool) MaxSize() uint64 {
+	return p.maxSize
+}
+
+// MinSize returns the minimum size of byte slices the pool will return.
+func (p *Pool) MinSize() uint64 {
+	return p.minSize
+}
+
 func (p *Pool) get(reqSize uint64) *buffer {
 	size := reqSize
 
 	if reqSize > p.maxSize {
-		panic("can't fill request for buffer because it is larger than the pool will handle")
+		return &buffer{make([]byte, reqSize, reqSize), reqSize, true}
 	}
 	if reqSize < p.minSize {
 		size = p.minSize
@@ -355,7 +370,7 @@ func (p *Pool) get(reqSize uint64) *buffer {
 
 	if elem != nil {
 		p.stats[bufBit].hit()
-		elem.buffer.size = int(reqSize)
+		elem.buffer.size = reqSize
 		return elem.buffer
 	}
 
@@ -364,10 +379,14 @@ func (p *Pool) get(reqSize uint64) *buffer {
 	if bufSize > p.maxSize {
 		bufSize = p.maxSize
 	}
-	return &buffer{make([]byte, bufSize, bufSize), int(reqSize)}
+	return &buffer{make([]byte, bufSize, bufSize), reqSize, false}
 }
 
 func (p *Pool) returnToPool(b *buffer) {
+	if b.unmanaged {
+		return
+	}
+
 	bufBit := largestSet(uint64(cap(b.buf)))
 	if 1<<bufBit < len(b.buf) {
 		bufBit++
@@ -460,8 +479,9 @@ func (pb *poolAllocator) Return() {
 }
 
 type buffer struct {
-	buf  []byte
-	size int
+	buf       []byte
+	size      uint64
+	unmanaged bool
 }
 
 type gcAllocator struct {
