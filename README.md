@@ -1,4 +1,5 @@
-# gomempool
+gomempool
+=========
 
 [![Build Status](https://travis-ci.org/thejerf/gomempool.png?branch=master)](https://travis-ci.org/thejerf/gomempool)
 
@@ -14,9 +15,19 @@ This is fully covered with [godoc](http://godoc.org/github.com/thejerf/gomempool
 including examples, motivation, and everything else you might otherwise
 expect from a README.md on GitHub. (DRY.)
 
-This is not currently tagged with particular git tags for Go as this is
-currently considered to be alpha code. As I move this into production and
-feel more confident about it, I'll give it relevant tags.
+This is currently at version 1.0.0, and can imported via
+gopkg.in/thejerf/gomempool.v1 if you like. [Semantic
+versioning](http://semver.org/spec/v2.0.0.html) will be used for
+version numbers.
+
+Code Signing
+------------
+
+Starting with commit ff6f742, I will be signing this repository
+with the ["jerf" keybase account](https://keybase.io/jerf).
+
+sync.Pool
+---------
 
 "What about sync.Pool?" sync.Pool turns out to solve a different problem.
 sync.Pool focuses on having a pool of otherwise indistinguishable objects.
