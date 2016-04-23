@@ -295,7 +295,7 @@ func (p *Pool) Stats() []Stat {
 		return []Stat{}
 	}
 
-	s := make([]Stat, 0)
+	s := []Stat{}
 	p.m.Lock()
 	defer p.m.Unlock()
 
