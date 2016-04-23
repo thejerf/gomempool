@@ -1,5 +1,5 @@
 gomempool
-=========
+---------
 
 [![Build Status](https://travis-ci.org/thejerf/gomempool.png?branch=master)](https://travis-ci.org/thejerf/gomempool)
 
@@ -23,20 +23,18 @@ version numbers.
 Code Signing
 ------------
 
-Starting with commit ff6f742, I will be signing this repository
-with the ["jerf" keybase account](https://keybase.io/jerf).
+Starting with commit f94a124, I will be signing this repository
+with the ["jerf" keybase account](https://keybase.io/jerf). If you are viewing
+this repository through GitHub, you should see the commits as showing as
+"verified" in the commit view.
+
+(Bear in mind that due to the nature of how git commit signing works, there
+may be runs of unverified commits; what matters is that the top one is
+signed.)
 
 sync.Pool
 ---------
 
-"What about sync.Pool?" sync.Pool turns out to solve a different problem.
-sync.Pool focuses on having a pool of otherwise indistinguishable objects.
-gomempool specifically focuses on []bytes of potentially different sizes.
-After some analysis, I don't see a reason to even use sync.Pool, because
-there's not much it could improve in gomempool. gomempool and sync.Pool
-turn out not to overlap at all.
-
-(Also I've at least picked up rumors that the core devs have been
-underwhelmed by sync.Pool. gomempool solves a real, if obscure,
-problem. You probably don't need gomempool, but there _are_ real
-problems it solves.)
+"What about sync.Pool?" sync.Pool efficiently pools a homogeneous collection
+of objects, whereas the focus of gomempool here is explicitly on
+heterogeneous []bytes. They don't overlap much.

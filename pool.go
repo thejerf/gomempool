@@ -83,6 +83,10 @@ returns an allocator that is not yet used. You may then call
 is then associated with that Allocator until you call .Return() on
 the allocator, after which the []byte goes back into the pool.
 
+Allocations never fail (barring a complete out-of-memory situation, of
+course). If the pool does not have a correctly-sized []byte on hand,
+it will create one.
+
 If you ask for more bytes than the pool is configured to store, the
 Allocator will create a transient []byte, which it will not manage.
 You can check whether you are invoking this case by calling .MaxSize on
@@ -180,10 +184,6 @@ Additional Functionality
 You can query the pool for its cache statistics by calling Stats(),
 which will return a structure describing how the individual buckets
 are performing.
-
-Quality: At the moment I would call this alpha code. Go lint clean, go vet
-clean, 100% coverage in the tests. You and I both know that doesn't prove
-this is bug-free, but at least it shows I care.
 
 */
 package gomempool
