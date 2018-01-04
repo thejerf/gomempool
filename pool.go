@@ -264,7 +264,7 @@ type Stat struct {
 // * maxSize * 2.
 func New(minSize, maxSize, maxBufs uint64) *Pool {
 	if minSize > maxSize {
-		panic("can't create a pool with minSize less than the maxSize")
+		panic("can't create a pool with minSize greater than the maxSize")
 	}
 
 	if maxSize >= 1<<largestPowerWeSupport {
