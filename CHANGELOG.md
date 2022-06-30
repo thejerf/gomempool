@@ -1,3 +1,9 @@
+Release v1.0.1
+--------------
+
+* This is a no-change release, it simply upgrades to full go module
+  support.
+
 Release v1.0.0
 --------------
 

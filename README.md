@@ -15,8 +15,7 @@ This is fully covered with [godoc](http://godoc.org/github.com/thejerf/gomempool
 including examples, motivation, and everything else you might otherwise
 expect from a README.md on GitHub. (DRY.)
 
-This is currently at version 1.0.0, and can imported via
-gopkg.in/thejerf/gomempool.v1 if you like. [Semantic
+This is currently at version 1.0.0. [Semantic
 versioning](http://semver.org/spec/v2.0.0.html) will be used for
 version numbers.
 
